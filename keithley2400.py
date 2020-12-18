@@ -9,6 +9,8 @@ import pyvisa
 import time
 import numpy
 
+rm = pyvisa.ResourceManager()
+
 class Keithley2400:
     data_entry = 5
     trigger_count = 1
@@ -21,9 +23,9 @@ class Keithley2400:
         pass
           
     def open_com(self, resourceName):
-        self.rm = pyvisa.ResourceManager()
+        #self.rm = pyvisa.ResourceManager()
         #print(self.rm.list_resources())
-        self.inst = self.rm.open_resource(resourceName) 
+        self.inst = rm.open_resource(resourceName) 
         print(self.inst.query('*IDN?'))
                 
     def close_com(self):
@@ -33,7 +35,7 @@ class Keithley2400:
         #Close instrument connection
         self.inst.close()
         #Close visa session
-        res = self.rm.close()
+        #res = rm.close()
         return res
 
     def return_command_result(self,command):
@@ -52,15 +54,15 @@ class Keithley2400:
         res = self.inst.write(command)
         return res
 
-    def config_voltmeter(self):
+    def config_voltmeter(self, volt_range = 10):
         res = self.send_cmd("*RST")
         res = self.send_cmd(":SOUR:FUNC CURR")
         res = self.send_cmd(":SOUR:CURR:MODE FIX")
         res = self.send_cmd(":SOUR:CURR:RANGE:AUTO ON")
         res = self.send_cmd(":SOUR:CURR:LEV 0")
         res = self.send_cmd(":SENS:FUNC \"VOLT\"")
-        res = self.send_cmd(":SENS:VOLT:PROT 10")
-        res = self.send_cmd(":SENS:VOLT:RANG 10")
+        res = self.send_cmd(":SENS:VOLT:PROT "  + str(volt_range))
+        res = self.send_cmd(":SENS:VOLT:RANG " + str(volt_range))
         res = self.send_cmd(":SENS:VOLT:NPLC " + str(self.nplc))
         res = self.send_cmd(":TRIG:COUN " + str(self.trigger_count))
         return res
@@ -89,7 +91,7 @@ class Keithley2400:
             res = self.send_cmd(":SYST:RSEN OFF")
         return res
 
-    def config_sourcemeter_cur(self, volt_sense_prot,volt_sense_range, cur_source_range ):
+    def config_sourcemeter_cur(self, volt_sense_prot,volt_sense_range, cur_source_range):
         res = self.send_cmd("*RST")
         res = self.send_cmd(":SOUR:FUNC CURR")
         res = self.send_cmd(":SOUR:CURR:MODE FIX")
@@ -115,6 +117,14 @@ class Keithley2400:
         res = self.send_cmd(mes)
         return res
 
+    def enable(self):
+        res = self.send_cmd(':OUTP ON')
+        return res
+
+    def disable(self):
+        res = self.send_cmd(':OUTP OFF')
+        return res
+
     def measure(self):
         try:
             out = self.send_query("READ?")
@@ -136,9 +146,14 @@ class Keithley2400:
         v, i = data[0], data[1]
         return(i, v)
 
+    def measure_v(self):
+        data = self.measure() # measure
+        v = data[0]
+        return(v)
+
 if __name__ == "__main__":
     keithley2400 = Keithley2400()
-    keithley2400.open_com('GPIB0::25::INSTR') 
+    keithley2400.open_com('GPIB0::25::INSTR')
     keithley2400.close_com()
 
 

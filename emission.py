@@ -4,7 +4,8 @@ import numpy
 import time
 import math
 
-keithley2400 = Keithley2400() # Create instrument instance
+keithley2400E = Keithley2400() # Create electrical instrument instance
+keithley2400O = Keithley2400() # Create optical instrument instance
 
 class HeaterIv:
     v_max = 3 # Voltage limit
@@ -47,51 +48,59 @@ class HeaterIv:
         t = ( ( -self.tcr1 + math.sqrt ( self.tcr1 * self.tcr1 - 4 * self.tcr2 * c ) ) / 2 / self.tcr2 ) + self.t_amb
         return t
 
-    def open_com(self, resource_name):
-        # Open COM
-        keithley2400.open_com(resource_name) 
+    def open_com(self, resource_name_elec, resource_name_opt):
+        keithley2400E.open_com(resource_name_elec) # Electrical instrument
+        keithley2400O.open_com(resource_name_opt) # Optical instrument
             
     def config(self, i_start, i_stop, i_step, remoteSense = True):
         self.i_array = numpy.arange(i_start, i_stop, i_step) # Create current array
                 
-        keithley2400.config_sourcemeter_cur(volt_sense_prot = self.v_max, volt_sense_range = self.v_max, cur_source_range = i_stop * 0.001)
+        keithley2400E.config_sourcemeter_cur(volt_sense_prot = self.v_max, volt_sense_range = self.v_max, cur_source_range = i_stop * 0.001)
         if remoteSense == True:
-            keithley2400.remote_sensing('on') # Config remote sensing
+            keithley2400E.remote_sensing('on') # Config remote sensing
         else:
-            keithley2400.remote_sensing('off') # Config remote sensing
+            keithley2400E.remote_sensing('off') # Config remote sensing
+
+        keithley2400O.config_voltmeter(volt_range = 5) # Config for optical sensing
 
     def run(self, file_name):
-        header_str = 'Timestamp,Current[A],Voltage[V],Resistance[Ohms],Power[W],Temperature[°C]' # Create header string
+        header_str = 'Timestamp,Current[A],Voltage[V],Resistance[Ohms],Power[W],Temperature[°C],Emission[V]' # Create header string
         self.save_data(header_str, file_name) # Save header string
         
         # Ambient IV capture
-        keithley2400.setsource_cur(self.i_amb * 0.001) # Set ambient current
-        keithley2400.enable() # Enable output
+        keithley2400E.setsource_cur(self.i_amb * 0.001) # Set ambient current
+        keithley2400E.enable() # Enable output
+        keithley2400O.enable() # Enable optical voltage sense
         time.sleep(self.on_delay) # Delay
-        i_amb, v_amb = keithley2400.measure_iv() # Capture ambient data
+        
+        i_amb, v_amb = keithley2400E.measure_iv() # Capture ambient IV data
+        v_opt_amb = keithley2400O.measure_v() # Capture ambient optical data
          
         for set_i in self.i_array: # Loop through current
-            keithley2400.setsource_cur(set_i * 0.001) # Set current
+            keithley2400E.setsource_cur(set_i * 0.001) # Set current
             print("Current = {:.1f} mA".format(set_i)) # Print setpoint
             time.sleep(self.on_delay) # Delay
-            i, v = keithley2400.measure_iv() # Capture data
+            i, v = keithley2400E.measure_iv() # Capture data
+            v_opt = keithley2400O.measure_v() - v_opt_amb # Capture optical data
             pwr = i * v # Calculate power 
             res = v / i # Calculate resistance
             t = self.calc_temp(i_amb, v_amb, i, v) # Calculate temperature
             tempo = datetime.today() # Get timestamp
-            data_str = str(tempo) + ',' + str(i) + ',' + str(v) + ',' + str(res) + ',' + str(pwr)+ ',' + str(t) # Get data string
+            data_str = str(tempo) + ',' + str(i) + ',' + str(v) + ',' + str(res) + ',' + str(pwr)+ ',' + str(t) + ',' + str(v_opt) # Get data string
             self.save_data(data_str, file_name) # Save data string
 
         # Disable output & COM port
-        keithley2400.disable()
-        keithley2400.close_com()
+        keithley2400E.disable()
+        keithley2400O.disable()
+        keithley2400E.close_com()
+        keithley2400O.close_com()
         
 if __name__=="__main__" :
     
     heaterIv = HeaterIv()
-    heaterIv.open_com('GPIB0::25::INSTR') 
-    heaterIv.config(i_start = 3, i_stop = 100, i_step = 10, remoteSense = True)
-    heaterIv.run('test.csv')
+    heaterIv.open_com('GPIB0::25::INSTR', 'GPIB0::26::INSTR') 
+    heaterIv.config(i_start = 3, i_stop = 110, i_step = 1, remoteSense = True)
+    heaterIv.run('Chip83_4260nm_180BW_110mA.csv')
      
     
     
